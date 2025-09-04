@@ -8,7 +8,7 @@ import {
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import EgressHelper from "@livekit/egress-sdk";
-import "./CompositeTemplate.css";
+
 
 const FRAME_DECODE_TIMEOUT = 5000;
 
