@@ -8,49 +8,48 @@ import {
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import EgressHelper from "@livekit/egress-sdk";
-
+import "./CompositeTemplate.css";
 
 const FRAME_DECODE_TIMEOUT = 5000;
 
 export default function CompositeTemplate({ layout: initialLayout }) {
   const room = useRoomContext();
   const [layout] = useState(initialLayout);
-  const [startCalled, setStartCalled] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
 
   const allTracks = useTracks(
     [Track.Source.Camera, Track.Source.ScreenShare, Track.Source.Unknown],
-    {
-      onlySubscribed: true,
-    }
+    { onlySubscribed: true }
   );
 
+  // Link the room with egress lifecycle helper
   useEffect(() => {
-    EgressHelper.setRoom(room);
+    if (room) {
+      EgressHelper.setRoom(room);
+    }
   }, [room]);
 
+  // Trigger recording start only when ready
   useEffect(() => {
-    if (startCalled) return;
+    if (hasStarted) return;
 
     const startTime = Date.now();
 
     const interval = setInterval(async () => {
       let hasVideoTracks = false;
       let hasSubscribedTracks = false;
-      let hasDecodedFrames = false;
+      let decodedFrames = false;
 
       for (const participant of room.remoteParticipants.values()) {
-        for (const publication of participant.trackPublications.values()) {
-          if (publication.isSubscribed) {
-            hasSubscribedTracks = true;
-          }
-          if (publication.kind === Track.Kind.Video && publication.videoTrack) {
+        for (const pub of participant.trackPublications.values()) {
+          if (pub.isSubscribed) hasSubscribedTracks = true;
+          if (pub.kind === Track.Kind.Video && pub.videoTrack) {
             hasVideoTracks = true;
-            const stats = await publication.videoTrack.getRTCStatsReport();
-            if (stats.size > 0) {
+            const stats = await pub.videoTrack.getRTCStatsReport();
+            if (stats.size) {
               for (const [, report] of stats) {
                 if (report.type === "inbound-rtp" && report.framesDecoded > 0) {
-                  hasDecodedFrames = true;
-                  break;
+                  decodedFrames = true;
                 }
               }
             }
@@ -58,30 +57,29 @@ export default function CompositeTemplate({ layout: initialLayout }) {
         }
       }
 
-      const timeElapsed = Date.now() - startTime;
-
+      const elapsed = Date.now() - startTime;
       if (
-        hasDecodedFrames ||
-        (!hasVideoTracks && hasSubscribedTracks && timeElapsed > 500) ||
-        (timeElapsed > FRAME_DECODE_TIMEOUT && hasSubscribedTracks)
+        decodedFrames || // video frames flowing
+        (!hasVideoTracks && hasSubscribedTracks && elapsed > 500) || // no video, tracks subscribed
+        (elapsed > FRAME_DECODE_TIMEOUT && hasSubscribedTracks) // fallback timeout
       ) {
         EgressHelper.startRecording();
-        setStartCalled(true);
+        setHasStarted(true);
         clearInterval(interval);
       }
     }, 100);
 
     return () => clearInterval(interval);
-  }, [room, startCalled]);
+  }, [room, hasStarted]);
 
   const filteredTracks = allTracks.filter(
-    (track) =>
-      track.publication.kind === Track.Kind.Video &&
-      track.participant.identity !== room.localParticipant.identity
+    (t) =>
+      t.publication.kind === Track.Kind.Video &&
+      t.participant.identity !== room.localParticipant.identity
   );
 
   return (
-    <div className={`room-container ${layout.startsWith("light") ? "light" : "dark"}`}>
+    <div className={`room-container ${layout.endsWith("-light") ? "light" : "dark"}`}>
       <GridLayout tracks={filteredTracks}>
         <ParticipantTile showPlaceholder />
       </GridLayout>

@@ -3,7 +3,7 @@ import EgressHelper from "@livekit/egress-sdk";
 import RoomPage from "./RoomPage";
 import "./App.css";
 
-function App() {
+export default function App() {
   return (
     <div className="container">
       <RoomPage
@@ -14,5 +14,3 @@ function App() {
     </div>
   );
 }
-
-export default App;
